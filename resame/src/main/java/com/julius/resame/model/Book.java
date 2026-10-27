@@ -45,6 +45,8 @@ public class Book {
     public enum Status {
         PENDING,
         APPROVED,
-        CANCELLED
+        CANCELLED,
+        OVERDUE,
+        RETURNED
     }
 }
