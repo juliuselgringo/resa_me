@@ -9,5 +9,7 @@ import java.util.List;
 public interface BookRepository extends JpaRepository<Book, Long> {
 
     List<Book> findByEndDateBeforeAndStatusIn(LocalDateTime endDate, List<Book.Status> statuses);
+
+    List<Book> findByUserUserId(Long userId);
     
 }
