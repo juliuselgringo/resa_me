@@ -34,10 +34,12 @@ public class BookService {
 
         // décrémenter la quantité disponible de bookable
         bookable.setQuantity(bookable.getQuantity() - book.getQuantityBooked());
-        bookRepository.save(book);
 
         // status par défaut 
         book.setStatus(Book.Status.PENDING);
+
+        // sauvegarder la réservation
+        bookRepository.save(book);
 
         return book;
     }
@@ -166,7 +168,7 @@ public class BookService {
 
         // Vérifier que bookToCancel a un status PENDING
         if(bookToCancel.getStatus() != Book.Status.PENDING) {
-            throw new IllegalArgumentException("Book have to be PENDING to be CANCELED")
+            throw new IllegalArgumentException("Book have to be PENDING to be CANCELED");
         }
         
         // changer le status

@@ -36,7 +36,7 @@ public class AppUserServiceTest {
         existingUser.setEmail("test@example.com");
 
         when(appUserRepository.findByEmail("test@example.com"))
-            .thenReturn(java.util.Optional.of(existingUser));
+            .thenReturn(Optional.of(existingUser));
 
         AppUser newUser = new AppUser();
         newUser.setEmail("test@example.com");
