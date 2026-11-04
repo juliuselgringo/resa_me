@@ -94,8 +94,8 @@ public class BookService {
 
     }
 
-    // changer le status d'une réservation
-    public Book changeBookStatus(Book bookToMark, Book.Status newStatus) {
+    // changer le status d'une réservation si le status actuel est différent du nouveau status
+    private Book changeBookStatus(Book bookToMark, Book.Status newStatus) {
         // vérifier que le book n'a pas déjà le status voulu
         if (bookToMark.getStatus() == newStatus) {
             throw new IllegalArgumentException("Book is already marked as " + newStatus);
