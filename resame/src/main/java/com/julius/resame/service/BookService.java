@@ -20,6 +20,9 @@ import java.util.List;
 public class BookService {
     private final BookRepository bookRepository;
 
+    /*
+    * CREATE BOOK
+    */
     @Transactional
     public Book createBook(Book book) {
         // vérifier que startDate est avant endDate
@@ -44,6 +47,9 @@ public class BookService {
         return book;
     }
 
+    /*
+    * VERIFY EXISTS AND PERMISSIONS AND ID MATCH
+    */
     // Vérifier l'existence, les permissions et le match id
     private void verifyExistsAndPermissionsAndIdMatch(Long bookId, Book targetBook, AppUser currentUser) {
         // vérifier l'existence du book
@@ -61,6 +67,9 @@ public class BookService {
         
     }
 
+    /*
+    * UPDATE BOOK
+    */
     @Transactional 
     public Book updateBook(Long bookId, Book updatedBook, AppUser currentUser) {
         // vérifier id match et permissions
@@ -180,5 +189,25 @@ public class BookService {
 
         return bookToCancel;
     }
+
+    /**
+     * GETTER
+     */
+    // GET ALL BOOKS
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    // GET BOOK BY ID
+    public Book getBookById(Long bookId) {
+        return bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
+    }
+
+    // GET BOOKS BY USER ID
+    public List<Book> getBooksByUserId(Long userId) {
+        return bookRepository.findByUserUserId(userId);
+    }
+
 
 }

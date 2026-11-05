@@ -85,6 +85,11 @@ public class AppUserService {
     }
 
     // GETTER
+    // GET ALL USERS
+    public List<AppUser> getAllUsers() {
+        return appUserRepository.findAll();
+    }
+
     // GET USER BY ID
     public Optional<AppUser> getUserById(Long userId) {
         return appUserRepository.findById(userId);
@@ -93,11 +98,6 @@ public class AppUserService {
     // USER BY EMAIL
     public Optional<AppUser> getUserByEmail(String email) {
         return appUserRepository.findByEmail(email);
-    }
-
-    // GET ALL USERS
-    public List<AppUser> getAllUsers() {
-        return appUserRepository.findAll();
     }
 
 }

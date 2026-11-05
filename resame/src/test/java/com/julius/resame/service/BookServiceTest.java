@@ -12,6 +12,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.util.Optional;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -610,5 +612,29 @@ public class BookServiceTest {
         // Assert
         assertEquals(Book.Status.CANCELED, result.getStatus());
         assertEquals(5, bookable.getQuantity()); // Quantity should be incremented (3+2)
+    }
+
+    // scheduler pour marquer les réservations en retard
+    @Test 
+    public void testReleaseExpiredBooks_ShouldReturnBooksWithStatusOverdue() {
+        // Arrange
+        Book book1 = new Book();
+        book1.setBookId(1L);
+        book1.setStatus(Book.Status.PENDING);
+        Book book2 = new Book();
+        book2.setBookId(2L);
+        book2.setStatus(Book.Status.APPROVED);
+        List<Book> overdueBooks = Arrays.asList(book1, book2);
+
+        when(bookRepository.findByEndDateBeforeAndStatusIn(any(LocalDateTime.class), anyList()))
+            .thenReturn(overdueBooks);
+
+        // Act
+        bookService.releaseExpiredBooks();
+
+        // Assert
+        assertEquals(Book.Status.OVERDUE, book1.getStatus());
+        assertEquals(Book.Status.OVERDUE, book2.getStatus());
+        verify(bookRepository, times(1)).findByEndDateBeforeAndStatusIn(any(LocalDateTime.class), anyList());
     }
 }
