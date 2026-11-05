@@ -55,4 +55,25 @@ public class BookController {
         return bookService.updateBook(bookId, updatedBook, currentUser);
     }
 
+    // POST /api/books/{bookId}/return -> retourner une réservation par son ID
+    @PostMapping("/{bookId}/return")
+    public Book returnBook(@PathVariable Long bookId, @AuthenticationPrincipal AppUser currentUser) {
+        Book bookToReturn = bookService.getBookById(bookId);
+        return bookService.markAsReturned(bookId, bookToReturn, currentUser);
+    }
+
+    // POST /api/books/{bookId}/approve -> approuver une réservation par son ID
+    @PostMapping("/{bookId}/approve")
+    public Book approveBook(@PathVariable Long bookId, @AuthenticationPrincipal AppUser currentUser) {
+        Book bookToApprove = bookService.getBookById(bookId);
+        return bookService.approveBook(bookId, bookToApprove, currentUser);
+    }
+
+    // POST /api/books/{bookId}/cancel -> annuler une réservation par son ID
+    @PostMapping("/{bookId}/cancel")
+    public Book cancelBook(@PathVariable Long bookId, @AuthenticationPrincipal AppUser currentUser) {
+        Book bookToCancel = bookService.getBookById(bookId);
+        return bookService.cancelBook(bookId, bookToCancel, currentUser);
+    }
+
 }
