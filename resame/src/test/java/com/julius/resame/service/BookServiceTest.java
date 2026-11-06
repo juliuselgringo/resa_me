@@ -2,7 +2,9 @@ package com.julius.resame.service;
 
 import com.julius.resame.model.Book;
 import com.julius.resame.repository.BookRepository;
+import com.julius.resame.repository.BookableRepository;
 import com.julius.resame.model.Bookable;
+import com.julius.resame.dto.BookRequest;
 import com.julius.resame.model.AppUser;
 
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest
@@ -28,6 +31,9 @@ public class BookServiceTest {
     @MockBean 
     private BookRepository bookRepository;
 
+    @MockBean 
+    private BookableRepository bookableRepository;
+
     /**
     * CREATE BOOK
     */
@@ -35,13 +41,27 @@ public class BookServiceTest {
     @Test 
     public void testCreateBook_ShouldThrowIfStartDateAfterEndDate() {
         // Arrange
-        Book book = new Book();
-        book.setStartDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        book.setEndDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        Bookable bookable = new Bookable();
+        bookable.setBookableId(1L);
+        bookable.setQuantity(10);
+
+        BookRequest bookRequest = new BookRequest();
+        bookRequest.setBookableId(bookable.getBookableId());
+        bookRequest.setStartDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookRequest.setEndDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookRequest.setQuantityBooked(2);
+
+        AppUser user = new AppUser();
+        user.setEmail("example@test.com");
+        user.setRole(AppUser.Role.ADMIN);
+
+        // Mock
+        when(bookableRepository.findById(any(Long.class)))
+            .thenReturn(Optional.of(bookable));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.createBook(book);
+            bookService.createBook(bookRequest, user);
         });
 
     }
