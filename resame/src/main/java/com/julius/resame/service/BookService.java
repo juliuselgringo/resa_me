@@ -2,7 +2,11 @@ package com.julius.resame.service;
 
 import com.julius.resame.repository.BookRepository;
 import com.julius.resame.model.Book;
+import com.julius.resame.dto.BookRequest;
+import com.julius.resame.dto.BookResponse;
+import com.julius.resame.dto.BookUpdateRequest;
 import com.julius.resame.model.Bookable;
+import com.julius.resame.repository.BookableRepository;
 import com.julius.resame.model.AppUser;
 
 import jakarta.transaction.Transactional;
@@ -13,24 +17,34 @@ import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service 
 @RequiredArgsConstructor
 public class BookService {
     private final BookRepository bookRepository;
-
+    private final BookableRepository bookableRepository;
     /*
     * CREATE BOOK
     */
     @Transactional
-    public Book createBook(Book book) {
+    public BookResponse createBook(BookRequest bookRequest, AppUser currentUser) {
+        // Convertir BookRequest en Book
+        Book book = new Book();
+        Bookable bookable = bookableRepository.findById(bookRequest.getBookableId())
+                .orElseThrow(() -> new IllegalArgumentException("Bookable with ID " + bookRequest.getBookableId() + " does not exist"));
+        book.setBookable(bookable);
+        book.setUser(currentUser);
+        book.setStartDate(bookRequest.getStartDate());
+        book.setEndDate(bookRequest.getEndDate());      
+        book.setQuantityBooked(bookRequest.getQuantityBooked());
+
         // vérifier que startDate est avant endDate
         if (book.getStartDate().isAfter(book.getEndDate())) {
             throw new IllegalArgumentException("Start date must be before end date");
         }
-        // vérifier que bookable.quantity est supérieur à book.quantity_booked
-        Bookable bookable = book.getBookable();
+        // vérifier que bookable.quantity est supérieur à book.quantityBooked
         if (bookable.getQuantity() < book.getQuantityBooked()) {
             throw new IllegalArgumentException("Quantity booked cannot exceed available quantity");
         }
@@ -44,22 +58,14 @@ public class BookService {
         // sauvegarder la réservation
         bookRepository.save(book);
 
-        return book;
+        return new BookResponse(book);
     }
 
     /*
     * VERIFY EXISTS AND PERMISSIONS AND ID MATCH
     */
     // Vérifier l'existence, les permissions et le match id
-    private void verifyExistsAndPermissionsAndIdMatch(Long bookId, Book targetBook, AppUser currentUser) {
-        // vérifier l'existence du book
-        if(!bookRepository.findById(bookId).isPresent()){
-            throw new IllegalArgumentException("Book with ID " + bookId + " does not exist");
-        }
-        // vérifier que l'id du book correspond à l'id du book à mettre à jour
-        if (!bookId.equals(targetBook.getBookId())) {
-            throw new IllegalArgumentException("Book ID mismatch");
-        }
+    private void verifyPermissions(Book targetBook, AppUser currentUser) {        
         // vérifier les droits
         if (!targetBook.getUser().getUserId().equals(currentUser.getUserId()) && !currentUser.getRole().equals(AppUser.Role.ADMIN)) {
             throw new IllegalArgumentException("You are not authorized to update this book");
@@ -71,35 +77,43 @@ public class BookService {
     * UPDATE BOOK
     */
     @Transactional 
-    public Book updateBook(Long bookId, Book updatedBook, AppUser currentUser) {
-        // vérifier id match et permissions
-        verifyExistsAndPermissionsAndIdMatch(bookId, updatedBook, currentUser);
+    public BookResponse updateBook(Long bookId, BookUpdateRequest bookUpdateRequest, AppUser currentUser) {
+        // convertir BookUpdateRequest en Book
+        Book bookToUpdate = bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
+
+        // vérifier permissions
+        verifyPermissions(bookToUpdate, currentUser);
 
         // un utilisateur ne peux modifier que les réservations dont le status est PENDING
-        if(!currentUser.getRole().equals(AppUser.Role.ADMIN) && updatedBook.getStatus() != Book.Status.PENDING) {
-            throw new IllegalArgumentException("Only ADMIN can update non-PENDING books. Current status: " + updatedBook.getStatus());
+        if(!currentUser.getRole().equals(AppUser.Role.ADMIN) && bookToUpdate.getStatus() != Book.Status.PENDING) {
+            throw new IllegalArgumentException("Only ADMIN can update non-PENDING books. Current status: " + bookToUpdate.getStatus());
         }
 
         // vérifier que startDate est avant endDate
-        if (updatedBook.getStartDate().isAfter(updatedBook.getEndDate())) {
+        if (bookUpdateRequest.getStartDate().isAfter(bookUpdateRequest.getEndDate())) {
             throw new IllegalArgumentException("Start date must be before end date");
         }
-        // vérifier que bookable.quantity est supérieur à book.quantity_booked
-        Bookable bookable = updatedBook.getBookable();
-        if (bookable.getQuantity() < updatedBook.getQuantityBooked()) {
+        // vérifier que bookable.quantity est supérieur à book.quantityBooked
+        Bookable bookable = bookToUpdate.getBookable();
+        if ((bookable.getQuantity()+bookToUpdate.getQuantityBooked()) < bookUpdateRequest.getQuantityBooked()) {
             throw new IllegalArgumentException("Quantity booked cannot exceed available quantity");
         }
 
         // décrémenter la quantité disponible de bookable si la quantité réservée a changé
         // récupérer l'ancien book pour comparer les quantités
-        Book oldBook = bookRepository.findById(bookId).get();
-        if (oldBook.getQuantityBooked() != updatedBook.getQuantityBooked()) {
-            bookable.setQuantity(bookable.getQuantity() + oldBook.getQuantityBooked() - updatedBook.getQuantityBooked());
+        if (bookToUpdate.getQuantityBooked() != bookUpdateRequest.getQuantityBooked()) {
+            bookable.setQuantity(bookable.getQuantity() + bookToUpdate.getQuantityBooked() - bookUpdateRequest.getQuantityBooked());
         }
 
-        bookRepository.save(updatedBook);
+        // mettre à jour les champs de la réservation
+        bookToUpdate.setStartDate(bookUpdateRequest.getStartDate());
+        bookToUpdate.setEndDate(bookUpdateRequest.getEndDate());
+        bookToUpdate.setQuantityBooked(bookUpdateRequest.getQuantityBooked());
 
-        return updatedBook;
+        bookRepository.save(bookToUpdate);
+
+        return new BookResponse(bookToUpdate);
 
     }
 
@@ -115,9 +129,10 @@ public class BookService {
 
     // marqué le status d'une réservation RETURNED
     @Transactional
-    public Book markAsReturned(Long bookId, Book bookToMark,AppUser currentUser) {
-        // vérifier id match et permissions
-        verifyExistsAndPermissionsAndIdMatch(bookId, bookToMark, currentUser);
+    public BookResponse markAsReturned(Long bookId, AppUser currentUser) {
+        // vérifier que bookId existe
+        Book bookToMark = bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
 
         // ONLY ADMIN
         if(currentUser.getRole() != AppUser.Role.ADMIN) {
@@ -136,7 +151,7 @@ public class BookService {
         // changer le status
         bookToMark = changeBookStatus(bookToMark, Book.Status.RETURNED);
 
-        return bookToMark;
+        return new BookResponse(bookToMark);
     }
 
     // Vérification et changement auto des status des réservations non retournée en OVERDUE
@@ -152,8 +167,10 @@ public class BookService {
 
     // Approuver une réservation
     @Transactional
-    public Book approveBook(Long bookId, Book bookToApprove, AppUser currentUser) {
-        verifyExistsAndPermissionsAndIdMatch(bookId, bookToApprove, currentUser);
+    public BookResponse approveBook(Long bookId, AppUser currentUser) {
+        // Vérifier que la réservation existe
+        Book bookToApprove = bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
 
         // only admin
         if(currentUser.getRole() != AppUser.Role.ADMIN) {
@@ -166,14 +183,16 @@ public class BookService {
         }
 
         changeBookStatus(bookToApprove,Book.Status.APPROVED);
-        return bookToApprove;
+
+        return new BookResponse(bookToApprove);
     }
 
     // Annulation d'une réservation
     @Transactional 
-    public Book cancelBook(Long bookId, Book bookToCancel, AppUser currentUser) {
-        // Vérifier match id et permissions
-        verifyExistsAndPermissionsAndIdMatch(bookId, bookToCancel, currentUser);
+    public BookResponse cancelBook(Long bookId, AppUser currentUser) {
+        // Vérifier si la réservation existe
+        Book bookToCancel = bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
 
         // Vérifier que bookToCancel a un status PENDING
         if(bookToCancel.getStatus() != Book.Status.PENDING) {
@@ -187,26 +206,35 @@ public class BookService {
         Bookable bookable = bookToCancel.getBookable();
         bookable.setQuantity(bookable.getQuantity() + bookToCancel.getQuantityBooked());
 
-        return bookToCancel;
+        return new BookResponse(bookToCancel);
     }
 
     /**
      * GETTER
      */
     // GET ALL BOOKS
-    public List<Book> getAllBooks() {
-        return bookRepository.findAll();
+    public List<BookResponse> getAllBooks() {
+        List<Book> books = bookRepository.findAll();
+        List<BookResponse> booksResponse = new ArrayList<>();
+        for (Book book : books) {
+            booksResponse.add(new BookResponse(book));
+        }
+        return booksResponse;
     }
 
     // GET BOOK BY ID
-    public Book getBookById(Long bookId) {
-        return bookRepository.findById(bookId)
+    public BookResponse getBookById(Long bookId) {
+        Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book with ID " + bookId + " does not exist"));
+        return new BookResponse(book);
     }
 
     // GET BOOKS BY USER ID
-    public List<Book> getBooksByUserId(Long userId) {
-        return bookRepository.findByUserUserId(userId);
+    public List<BookResponse> getBooksByUserId(Long userId) {
+        List<Book> booksByUser = bookRepository.findByUserUserId(userId);
+        List<BookResponse> booksResponse = new ArrayList<>();
+        booksResponse = booksByUser.stream().map(book -> new BookResponse(book)).toList(); 
+        return booksResponse;
     }
 
 

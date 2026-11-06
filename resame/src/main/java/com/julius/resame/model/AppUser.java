@@ -24,7 +24,7 @@ public class AppUser {
     private String email;
 
     @Column (nullable = false, length = 100)
-    @Size(min = 8, message = "Le mot de passe doit contenir au moins 8 caractères")
+    @Size(min = 6, message = "Le mot de passe doit contenir au moins 6 caractères")
     private String password;
 
     @Enumerated (EnumType.STRING)
