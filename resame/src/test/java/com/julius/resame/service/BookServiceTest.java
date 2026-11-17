@@ -5,6 +5,8 @@ import com.julius.resame.repository.BookRepository;
 import com.julius.resame.repository.BookableRepository;
 import com.julius.resame.model.Bookable;
 import com.julius.resame.dto.BookRequest;
+import com.julius.resame.dto.BookResponse;
+import com.julius.resame.dto.BookUpdateRequest;
 import com.julius.resame.model.AppUser;
 
 import org.junit.jupiter.api.Test;
@@ -70,18 +72,27 @@ public class BookServiceTest {
     @Test 
     public void testCreateBook_ShouldThrowIfQuantityBookedExceedsAvailable() {
         // Arrange
-        Book book = new Book();
-        book.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        book.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        book.setQuantityBooked(10);
-
         Bookable bookable = new Bookable();
+        bookable.setBookableId(1L);
         bookable.setQuantity(5); // Available quantity is less than booked quantity
-        book.setBookable(bookable);
+
+        BookRequest bookRequest = new BookRequest();
+        bookRequest.setBookableId(bookable.getBookableId());
+        bookRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookRequest.setQuantityBooked(10);
+
+        AppUser user = new AppUser();
+        user.setEmail("example@test.com");
+        user.setRole(AppUser.Role.ADMIN);
+
+        // Mock
+        when(bookableRepository.findById(any(Long.class)))
+            .thenReturn(Optional.of(bookable));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.createBook(book);
+            bookService.createBook(bookRequest, user);
         });
 
     }
@@ -91,23 +102,34 @@ public class BookServiceTest {
     public void testCreateBook_ShouldSaveBookAndDecrementQuantity() {
         // Arrange
         Book book = new Book();
-        book.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        book.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        book.setQuantityBooked(3);
+        book.setBookId(1L);
 
         Bookable bookable = new Bookable();
-        bookable.setQuantity(5); // Available quantity is more than booked quantity
-        book.setBookable(bookable);
+        bookable.setBookableId(1L);
+        bookable.setQuantity(4);
 
+        BookRequest bookRequest = new BookRequest();
+        bookRequest.setBookableId(bookable.getBookableId());
+        bookRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookRequest.setQuantityBooked(2);
+
+        AppUser user = new AppUser();
+        user.setEmail("example@test.com");
+        user.setRole(AppUser.Role.ADMIN);
+
+        // Mock
+        when(bookableRepository.findById(any(Long.class)))
+            .thenReturn(Optional.of(bookable));
         when(bookRepository.save(any(Book.class))).thenReturn(book);
 
         // Act
-        Book createdBook = bookService.createBook(book);
+        BookResponse bookResponse = bookService.createBook(bookRequest, user);
 
         // Assert
-        assertEquals(Book.Status.PENDING, createdBook.getStatus());
+        assertEquals(Book.Status.PENDING, bookResponse.getStatus());
         assertEquals(2, bookable.getQuantity()); // Quantity should be decremented
-        verify(bookRepository, times(1)).save(book); // Ensure save is called once
+        verify(bookRepository, times(1)).save(any(Book.class)); // Ensure save is called once
     }
 
     /**
@@ -118,14 +140,12 @@ public class BookServiceTest {
     public void testUpdateBook_ShouldThrowIfBookNotFound() {
         // Arrange
         Long bookId = 999L;
-        
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.USER);
-        updatedBook.setUser(currentUser);
 
         // Mock : Le book n'existe pas
         when(bookRepository.findById(bookId))
@@ -133,33 +153,9 @@ public class BookServiceTest {
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
+            bookService.updateBook(bookId, bookUpdateRequest, currentUser);
         });
 
-    }
-
-    // Vérifier que l'id du book correspond à l'id du book à mettre à jour
-    @Test 
-    public void testUpdateBook_ShouldThrowIfBookIdMismatch() {
-        // Arrange
-        Long bookId = 99L;
-
-        Book updatedBook = new Book();
-        updatedBook.setBookId(100L); // Mismatched ID
-
-        AppUser currentUser = new AppUser();
-        currentUser.setUserId(1L);
-        currentUser.setRole(AppUser.Role.USER);
-        updatedBook.setUser(currentUser);
-
-        // Mock : Le book existe
-        when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
-
-        // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
-        });
     }
 
     // Vérifier que l'utilisateur a les droits pour mettre à jour la réservation
@@ -168,12 +164,14 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
 
         AppUser bookOwner = new AppUser();
         bookOwner.setUserId(2L); // Owner of the book
-        updatedBook.setUser(bookOwner);
+        existingBook.setUser(bookOwner);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L); // Different user
@@ -181,11 +179,11 @@ public class BookServiceTest {
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
+            bookService.updateBook(bookId, bookUpdateRequest, currentUser);
         });
     }
 
@@ -195,22 +193,24 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStatus(Book.Status.APPROVED); // Non-PENDING status
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.APPROVED); // Non-PENDING status
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.USER);
-        updatedBook.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
+            bookService.updateBook(bookId, bookUpdateRequest, currentUser);
         });
     }
 
@@ -220,23 +220,25 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStartDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        updatedBook.setEndDate(LocalDateTime.of(2027, 1, 1, 0, 0)); // Invalid dates
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
+        bookUpdateRequest.setStartDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookUpdateRequest.setEndDate(LocalDateTime.of(2027, 1, 1, 0, 0)); // Invalid dates
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin can update any book
-        updatedBook.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
+            bookService.updateBook(bookId, bookUpdateRequest, currentUser);
         });
     }
 
@@ -246,28 +248,31 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        updatedBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        updatedBook.setQuantityBooked(10); // Booked quantity
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setQuantityBooked(10);
+        
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
+        bookUpdateRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookUpdateRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookUpdateRequest.setQuantityBooked(16); // Booked quantity
 
         Bookable bookable = new Bookable();
         bookable.setQuantity(5); // Available quantity is less than booked quantity
-        updatedBook.setBookable(bookable);
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin can update any book
-        updatedBook.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.updateBook(bookId, updatedBook, currentUser);
+            bookService.updateBook(bookId, bookUpdateRequest, currentUser);
         });
     }
 
@@ -277,41 +282,36 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book oldBook = new Book();
-        oldBook.setBookId(bookId);
-        oldBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        oldBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        oldBook.setQuantityBooked(1); // Booked quantity        
-
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        updatedBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        updatedBook.setQuantityBooked(3); // Booked quantity
-
         Bookable bookable = new Bookable();
-        bookable.setQuantity(4); // Available quantity is more than booked quantity
-        updatedBook.setBookable(bookable);
-        oldBook.setBookable(bookable);
+        bookable.setQuantity(4);
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        existingBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        existingBook.setQuantityBooked(1); // ancienne quantité réservée
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
-        currentUser.setRole(AppUser.Role.ADMIN); // Admin can update any book
-        updatedBook.setUser(currentUser);
-        oldBook.setUser(currentUser);
+        currentUser.setRole(AppUser.Role.ADMIN);
+        existingBook.setUser(currentUser);
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
+        bookUpdateRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookUpdateRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookUpdateRequest.setQuantityBooked(3); // nouvelle quantité
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(oldBook));
-
-        when(bookRepository.save(any(Book.class))).thenReturn(updatedBook);
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        bookService.updateBook(bookId, updatedBook, currentUser);
+        bookService.updateBook(bookId, bookUpdateRequest, currentUser);
 
         // Assert
-        assertEquals(2, bookable.getQuantity()); // Quantity should be decremented
-        verify(bookRepository, times(1)).save(updatedBook); // Ensure save is called once
+        assertEquals(2, bookable.getQuantity()); // 4 + 1 - 3 = 2
+        verify(bookRepository, times(1)).save(any(Book.class));
     }
 
     // Vérifier que admin peut mettre à jour un status APPROVED
@@ -320,35 +320,37 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        updatedBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        updatedBook.setStatus(Book.Status.APPROVED); // Non-PENDING status
-        updatedBook.setQuantityBooked(2);
+        Bookable bookable = new Bookable();
+        bookable.setQuantity(5);
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        existingBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        existingBook.setStatus(Book.Status.APPROVED); // Non-PENDING status
+        existingBook.setQuantityBooked(2);
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin can update any book
-        updatedBook.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
-        Bookable bookable = new Bookable();
-        bookable.setQuantity(5); // Available quantity is more than booked quantity
-
-        updatedBook.setBookable(bookable);
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
+        bookUpdateRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookUpdateRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookUpdateRequest.setQuantityBooked(2);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(updatedBook));
-
-        when(bookRepository.save(any(Book.class))).thenReturn(updatedBook);
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        Book result = bookService.updateBook(bookId, updatedBook, currentUser);
+        BookResponse result = bookService.updateBook(bookId, bookUpdateRequest, currentUser);
 
         // Assert
         assertEquals(Book.Status.APPROVED, result.getStatus());
-        verify(bookRepository, times(1)).save(updatedBook); // Ensure save is called once
+        verify(bookRepository, times(1)).save(any(Book.class));
     }
 
     // Vérifier que la quantité n'est pas décrémentée si la quantité réservée est la même lors de la mise à jour
@@ -357,41 +359,36 @@ public class BookServiceTest {
         // Arrange
         Long bookId = 1L;
 
-        Book oldBook = new Book();
-        oldBook.setBookId(bookId);
-        oldBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        oldBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        oldBook.setQuantityBooked(3); // Booked quantity        
-
-        Book updatedBook = new Book();
-        updatedBook.setBookId(bookId);
-        updatedBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
-        updatedBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
-        updatedBook.setQuantityBooked(3); // Same booked quantity
-
         Bookable bookable = new Bookable();
-        bookable.setQuantity(4); // Available quantity is more than booked quantity
-        updatedBook.setBookable(bookable);
-        oldBook.setBookable(bookable);
+        bookable.setQuantity(4);
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        existingBook.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        existingBook.setQuantityBooked(3); // ancienne quantité
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
-        currentUser.setRole(AppUser.Role.ADMIN); // Admin can update any book
-        updatedBook.setUser(currentUser);
-        oldBook.setUser(currentUser);
+        currentUser.setRole(AppUser.Role.ADMIN);
+        existingBook.setUser(currentUser);
+
+        BookUpdateRequest bookUpdateRequest = new BookUpdateRequest();
+        bookUpdateRequest.setStartDate(LocalDateTime.of(2027, 1, 1, 0, 0));
+        bookUpdateRequest.setEndDate(LocalDateTime.of(2027, 1, 2, 0, 0));
+        bookUpdateRequest.setQuantityBooked(3); // même quantité
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(oldBook));
-
-        when(bookRepository.save(any(Book.class))).thenReturn(updatedBook);
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        bookService.updateBook(bookId, updatedBook, currentUser);
+        bookService.updateBook(bookId, bookUpdateRequest, currentUser);
 
         // Assert
         assertEquals(4, bookable.getQuantity()); // Quantity should remain the same
-        verify(bookRepository, times(1)).save(updatedBook); // Ensure save is called once
+        verify(bookRepository, times(1)).save(any(Book.class));
     }
 
     /*
@@ -402,22 +399,21 @@ public class BookServiceTest {
     public void testMarkAsReturned_ShouldThrowExceptionIfUserIsNotAdmin() {
         // Arrange
         Long bookId = 1L;
-        Book bookToMark = new Book();
-        bookToMark.setBookId(bookId);
-        bookToMark.setStatus(Book.Status.APPROVED);
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.APPROVED);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.USER); // Not admin
-        bookToMark.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToMark));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.markAsReturned(bookId, bookToMark, currentUser);
+            bookService.markAsReturned(bookId, currentUser);
         });
     }
 
@@ -426,22 +422,21 @@ public class BookServiceTest {
     public void testMarkAsReturned_ShouldThrowExceptionIfBookNotApprovedOrOverdue() {
         // Arrange
         Long bookId = 1L;
-        Book bookToMark = new Book();
-        bookToMark.setBookId(bookId);
-        bookToMark.setStatus(Book.Status.PENDING); // Not APPROVED or OVERDUE
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.PENDING); // Not APPROVED or OVERDUE
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin
-        bookToMark.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToMark));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.markAsReturned(bookId, bookToMark, currentUser);
+            bookService.markAsReturned(bookId, currentUser);
         });
     }
 
@@ -450,22 +445,21 @@ public class BookServiceTest {
     public void testMarkAsReturned_ShouldThrowExceptionIfBookAlreadyReturned() {
         // Arrange
         Long bookId = 1L;
-        Book bookToMark = new Book();
-        bookToMark.setBookId(bookId);
-        bookToMark.setStatus(Book.Status.RETURNED); // Already RETURNED
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.RETURNED); // Already RETURNED
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin
-        bookToMark.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToMark));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.markAsReturned(bookId, bookToMark, currentUser);
+            bookService.markAsReturned(bookId, currentUser);
         });
     }
 
@@ -474,30 +468,31 @@ public class BookServiceTest {
     public void testMarkAsReturned_ShouldMarkBookAsReturnedAndIncrementQuantity() {
         // Arrange
         Long bookId = 1L;
-        Book bookToMark = new Book();
-        bookToMark.setBookId(bookId);
-        bookToMark.setStatus(Book.Status.APPROVED);
-        bookToMark.setQuantityBooked(2);
-
         Bookable bookable = new Bookable();
         bookable.setQuantity(3); // Available quantity
-        bookToMark.setBookable(bookable);
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.APPROVED);
+        existingBook.setQuantityBooked(2);
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
+        currentUser.setEmail("admin@test.com");
         currentUser.setRole(AppUser.Role.ADMIN); // Admin
-        bookToMark.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToMark));
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        Book result = bookService.markAsReturned(bookId, bookToMark, currentUser);
+        BookResponse result = bookService.markAsReturned(bookId, currentUser);
 
         // Assert
         assertEquals(Book.Status.RETURNED, result.getStatus());
-        assertEquals(5, bookable.getQuantity()); // Quantity should be incremented
+        assertEquals(5, bookable.getQuantity()); // 3 + 2 = 5
     }
 
     /*
@@ -508,22 +503,21 @@ public class BookServiceTest {
     public void testApproveBook_ShouldThrowExceptionIfUserIsNotAdmin() {
         // Arrange
         Long bookId = 1L;
-        Book bookToApprove = new Book();
-        bookToApprove.setBookId(bookId);
-        bookToApprove.setStatus(Book.Status.PENDING);
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.PENDING);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.USER); // Not admin
-        bookToApprove.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToApprove));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.approveBook(bookId, bookToApprove, currentUser);
+            bookService.approveBook(bookId, currentUser);
         });
     }
 
@@ -532,22 +526,21 @@ public class BookServiceTest {
     public void testApproveBook_ShouldThrowExceptionIfBookNotPending() {
         // Arrange
         Long bookId = 1L;
-        Book bookToApprove = new Book();
-        bookToApprove.setBookId(bookId);
-        bookToApprove.setStatus(Book.Status.CANCELED); // Not PENDING
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.CANCELED); // Not PENDING
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.ADMIN); // Admin
-        bookToApprove.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToApprove));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.approveBook(bookId, bookToApprove, currentUser);
+            bookService.approveBook(bookId, currentUser);
         });
     }
 
@@ -556,21 +549,27 @@ public class BookServiceTest {
     public void testApproveBook_ShouldApproveBook() {
         // Arrange
         Long bookId = 1L;
-        Book bookToApprove = new Book();
-        bookToApprove.setBookId(bookId);
-        bookToApprove.setStatus(Book.Status.PENDING);
+        Bookable bookable = new Bookable();
+        bookable.setName("Bookable 1");
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.PENDING);
+        existingBook.setQuantityBooked(1);
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
+        currentUser.setEmail("admin@test.com");
         currentUser.setRole(AppUser.Role.ADMIN); // Admin
-        bookToApprove.setUser(currentUser);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToApprove));
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        Book result = bookService.approveBook(bookId, bookToApprove, currentUser);
+        BookResponse result = bookService.approveBook(bookId, currentUser);
 
         // Assert
         assertEquals(Book.Status.APPROVED, result.getStatus());
@@ -584,22 +583,21 @@ public class BookServiceTest {
     public void testCancelBook_ShouldThrowExceptionIfBookNotPending() {
         // Arrange
         Long bookId = 1L;
-        Book bookToCancel = new Book();
-        bookToCancel.setBookId(bookId);
-        bookToCancel.setStatus(Book.Status.APPROVED); // Not PENDING
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.APPROVED); // Not PENDING
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
         currentUser.setRole(AppUser.Role.USER); // User
-        bookToCancel.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToCancel));
+            .thenReturn(Optional.of(existingBook));
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            bookService.cancelBook(bookId, bookToCancel, currentUser);
+            bookService.cancelBook(bookId, currentUser);
         });
     }
 
@@ -608,30 +606,31 @@ public class BookServiceTest {
     public void testCancelBook_ShouldCancelBook() {
         // Arrange
         Long bookId = 1L;
-        Book bookToCancel = new Book();
-        bookToCancel.setBookId(bookId);
-        bookToCancel.setStatus(Book.Status.PENDING);
-        bookToCancel.setQuantityBooked(2);
+        Bookable bookable = new Bookable();
+        bookable.setQuantity(3); // Available quantity
+
+        Book existingBook = new Book();
+        existingBook.setBookId(bookId);
+        existingBook.setStatus(Book.Status.PENDING);
+        existingBook.setQuantityBooked(2);
+        existingBook.setBookable(bookable);
 
         AppUser currentUser = new AppUser();
         currentUser.setUserId(1L);
+        currentUser.setEmail("user@test.com");
         currentUser.setRole(AppUser.Role.USER); // User
-        bookToCancel.setUser(currentUser);
-
-        Bookable bookable = new Bookable();
-        bookable.setQuantity(3); // Available quantity
-        bookToCancel.setBookable(bookable);
+        existingBook.setUser(currentUser);
 
         // Mock : Le book existe
         when(bookRepository.findById(bookId))
-            .thenReturn(Optional.of(bookToCancel));
+            .thenReturn(Optional.of(existingBook));
 
         // Act
-        Book result = bookService.cancelBook(bookId, bookToCancel, currentUser);
+        BookResponse result = bookService.cancelBook(bookId, currentUser);
 
         // Assert
         assertEquals(Book.Status.CANCELED, result.getStatus());
-        assertEquals(5, bookable.getQuantity()); // Quantity should be incremented (3+2)
+        assertEquals(5, bookable.getQuantity()); // 3 + 2 = 5
     }
 
     // scheduler pour marquer les réservations en retard
