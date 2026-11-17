@@ -13,4 +13,11 @@ public class AppUserResponse {
     private AppUser.Role role;
     private LocalDateTime createdAt;
 
+    public AppUserResponse(AppUser appUser){
+        this.userId = appUser.getUserId();
+        this.email = appUser.getEmail();
+        this.role = appUser.getRole();
+        this.createdAt = appUser.getCreatedAt();
+    }
+
 }

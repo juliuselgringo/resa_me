@@ -60,3 +60,25 @@ com/julius/resame/
 - Guide uniquement : pas de code généré sans demande explicite.
 - Réponses courtes. Explications sur demande.
 - Bonnes pratiques Spring : layers, DTO, validation, security.
+
+## Suivi migration DTO (en cours)
+
+Suite à l'implémentation des DTO après les services, migration des services et tests pour utiliser les DTO au lieu des entités directement.
+
+### DTO créés
+- `AppUserRequest`, `AppUserResponse`, `AppUserUpdateRequest`
+- `BookRequest`, `BookResponse`, `BookUpdateRequest`
+
+### Services
+| Fichier | Statut |
+|---|---|
+| `service/BookService.java` | ✅ migré |
+| `service/AppUserService.java` | ✅ migré |
+| `service/BookableService.java` | ⬜ à migrer (DTO BookableRequest/BookableResponse à créer) |
+| `service/GroupService.java` | ⬜ à migrer (DTO GroupRequest/GroupResponse à créer) |
+
+### Tests
+| Fichier | Statut |
+|---|---|
+| `test/.../BookServiceTest.java` | ✅ migré (21 tests OK) |
+| `test/.../AppUserServiceTest.java` | ⬜ à migrer |

@@ -2,6 +2,9 @@ package com.julius.resame.service;
 
 import com.julius.resame.repository.AppUserRepository;
 import com.julius.resame.model.AppUser;
+import com.julius.resame.dto.AppUserRequest;
+import com.julius.resame.dto.AppUserResponse;
+import com.julius.resame.dto.AppUserUpdateRequest;
 import com.julius.resame.model.Book;
 import com.julius.resame.repository.BookRepository;
 
@@ -12,7 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import lombok.RequiredArgsConstructor;
 
-import java.util.Optional;
 import java.util.List;
 
 @Service 
@@ -25,22 +27,28 @@ public class AppUserService {
 
     // CREATE USER avec vérification de l'existence et hachage du mot de passe
     @Transactional 
-    public AppUser createUser(AppUser appUser) {
+    public AppUserResponse createUser(AppUserRequest appUserRequest) {
         // vérifier si l'utilisateur existe déjà
-        if (appUserRepository.findByEmail(appUser.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("User with email " + appUser.getEmail() + " already exists");
+        if (appUserRepository.findByEmail(appUserRequest.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("User with email " + appUserRequest.getEmail() + " already exists");
         }
+
+        // Création du user à partir de la requête
+        AppUser newUser = new AppUser();
+        newUser.setEmail(appUserRequest.getEmail());
+        newUser.setRole(appUserRequest.getRole());
+
         // hasher le mot de passe avant de le sauvegarder
-        appUser.setPassword(passwordEncoder.encode(appUser.getPassword()));
-        return appUserRepository.save(appUser);
+        newUser.setPassword(passwordEncoder.encode(appUserRequest.getPassword()));
+
+        // Sauvegarder le nouvel user
+        newUser = appUserRepository.save(newUser);
+
+        return new AppUserResponse(newUser);
     }
 
-    // Méthode pour vérifier les droits d'accès et la correspondance des IDs
-    private void verifyAccess(Long userId, AppUser targetUser, AppUser currentUser) {
-        // vérifier que userId correspond à targetUser
-        if (!userId.equals(targetUser.getUserId())){
-            throw new IllegalArgumentException("User ID mismatch");
-        }
+    // Méthode pour vérifier les droits d'accès
+    private void verifyAccess(Long userId, AppUser currentUser) {
         if (!userId.equals(currentUser.getUserId()) && !currentUser.getRole().equals(AppUser.Role.ADMIN)) {
             throw new IllegalArgumentException("Insufficient permissions");
         }
@@ -48,12 +56,23 @@ public class AppUserService {
 
     // UPDATE USER
     @Transactional
-    public AppUser updateUser(Long userId, AppUser updatedUser, AppUser currentUser) {
-        // vérifier les droits et correspondance des IDs
-        verifyAccess(userId, updatedUser, currentUser);
+    public AppUserResponse updateUser(Long userId, AppUserUpdateRequest appUserUpdateRequest, AppUser currentUser) {
+        // récupération du user à partir de userId
+        AppUser userToUpdate = appUserRepository.findById(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User with ID " + userId + " does not exist"));
+
+        // vérifier les droits
+        verifyAccess(userId, currentUser);
+
+        if (appUserUpdateRequest.getEmail() != null) {
+            userToUpdate.setEmail(appUserUpdateRequest.getEmail());
+        }
+        if (appUserUpdateRequest.getPassword() != null) {
+            userToUpdate.setPassword(passwordEncoder.encode(appUserUpdateRequest.getPassword()));
+        }
         
-        appUserRepository.save(updatedUser);
-        return updatedUser;
+        appUserRepository.save(userToUpdate);
+        return new AppUserResponse(userToUpdate);
     }
 
     // Méthode pour récupérer ou créer un utilisateur anonyme
@@ -70,9 +89,9 @@ public class AppUserService {
 
     // DELETE USER
     @Transactional
-    public void deleteUser(Long userId, AppUser deletedUser, AppUser currentUser) {
-        // vérifier les droits et correspondance des IDs
-        verifyAccess(userId, deletedUser, currentUser);
+    public void deleteUser(Long userId, AppUser currentUser) {
+        // vérifier les droits
+        verifyAccess(userId, currentUser);
 
         // Créer ou récupérer l'utilisateur anonyme
         AppUser anonymousUser = getOrCreateAnonymousUser();
@@ -86,18 +105,24 @@ public class AppUserService {
 
     // GETTER
     // GET ALL USERS
-    public List<AppUser> getAllUsers() {
-        return appUserRepository.findAll();
+    public List<AppUserResponse> getAllUsers() {
+        return appUserRepository.findAll().stream()
+                .map(AppUserResponse::new)
+                .toList();
     }
 
     // GET USER BY ID
-    public Optional<AppUser> getUserById(Long userId) {
-        return appUserRepository.findById(userId);
+    public AppUserResponse getUserById(Long userId) {
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User with ID " + userId + " does not exist"));
+        return new AppUserResponse(user);
     }
 
     // USER BY EMAIL
-    public Optional<AppUser> getUserByEmail(String email) {
-        return appUserRepository.findByEmail(email);
+    public AppUserResponse getUserByEmail(String email) {
+        AppUser user = appUserRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User with email " + email + " does not exist"));
+        return new AppUserResponse(user);
     }
 
 }
